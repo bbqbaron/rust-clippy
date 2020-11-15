@@ -4,6 +4,7 @@ mod filter_map_identity;
 mod inefficient_to_string;
 mod inspect_for_each;
 mod manual_saturating_arithmetic;
+mod option_filter_map;
 mod option_map_unwrap_or;
 mod unnecessary_filter_map;
 mod unnecessary_lazy_eval;
@@ -851,6 +852,28 @@ declare_clippy_lint! {
 }
 
 declare_clippy_lint! {
+    /// **What it does:** Checks for indirect collection of populated `Option`
+    ///
+    /// **Why is this bad?** `Option` is like a collection of 0-1 things, so `flatten`
+    /// automatically does this without suspicious-looking `unwrap` calls.
+    ///
+    /// **Known problems:** None.
+    ///
+    /// **Example:**
+    ///
+    /// ```rust
+    /// my_iter.filter(Option::is_some).map(Option::unwrap)
+    /// ```
+    /// Use instead:
+    /// ```rust
+    /// my_iter.flatten()
+    /// ```
+    pub OPTION_FILTER_MAP,
+    style,
+    "filtering `Option` for `Some` then force-unwrapping, which can be one type-safe operation"
+}
+
+declare_clippy_lint! {
     /// **What it does:** Checks for the use of `iter.nth(0)`.
     ///
     /// **Why is this bad?** `iter.next()` is equivalent to
@@ -1553,6 +1576,7 @@ impl_lint_pass!(Methods => [
     FILTER_MAP_IDENTITY,
     MANUAL_FILTER_MAP,
     MANUAL_FIND_MAP,
+    OPTION_FILTER_MAP,
     FILTER_MAP_NEXT,
     FLAT_MAP_IDENTITY,
     MAP_FLATTEN,
@@ -3158,6 +3182,30 @@ fn lint_filter_map<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'_>, is_f
             let sugg = format!("{}_map(|{}| {}{})", filter_name, map_param_ident,
                 snippet(cx, map_arg.span, ".."), to_opt);
             span_lint_and_sugg(cx, lint, span, &msg, "try", sugg, Applicability::MachineApplicable);
+
+/// lint use of `filter().map()` for `Iterators`
+fn lint_filter_some_map_unwrap<'tcx>(
+    cx: &LateContext<'tcx>,
+    expr: &'tcx hir::Expr<'_>,
+    filter_args: &'tcx [hir::Expr<'_>],
+    map_args: &'tcx [hir::Expr<'_>],
+) {
+    // is it specifically `.filter(Option::is_some).map(Option::unwrap)`?
+    if option_filter_map::in_scope(filter_args, map_args) {
+        span_lint_and_help(
+            cx,
+            OPTION_FILTER_MAP,
+            expr.span,
+            "`filter` for `Some` followed by `unwrap`",
+            None,
+            "consider using `flatten` instead",
+        );
+    } else {
+        // lint if caller of `.filter().map()` is an Iterator
+        if match_trait_method(cx, expr, &paths::ITERATOR) {
+            let msg = "called `filter(..).map(..)` on an `Iterator`";
+            let hint = "this is more succinctly expressed by calling `.filter_map(..)` instead";
+            span_lint_and_help(cx, FILTER_MAP, expr.span, msg, None, hint);
         }
     }
 }

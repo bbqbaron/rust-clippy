@@ -1,0 +1,16 @@
+error: `filter` for `Some` followed by `unwrap`
+  --> $DIR/option_filter_map.rs:10:27
+   |
+LL |       let evens: Vec<i32> = vec![1, 2, 3]
+   |  ___________________________^
+LL | |         .into_iter()
+LL | |         .map(odds_out)
+LL | |         .filter(Option::is_some)
+LL | |         .map(Option::unwrap)
+   | |____________________________^
+   |
+   = note: `-D clippy::option-filter-map` implied by `-D warnings`
+   = help: consider using `flatten` instead
+
+error: aborting due to previous error
+
