@@ -4,6 +4,7 @@ mod filter_map_identity;
 mod inefficient_to_string;
 mod inspect_for_each;
 mod manual_saturating_arithmetic;
+mod option_filter_map;
 mod option_map_unwrap_or;
 mod unnecessary_filter_map;
 mod unnecessary_lazy_eval;

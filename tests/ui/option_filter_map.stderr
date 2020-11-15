@@ -49,4 +49,3 @@ LL |    let _ = vec![1].into_iter().map(odds_out).filter(|o| o.is_some()).map(|o
    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using `flatten` instead: `vec![1].into_iter().map(odds_out).flatten()`
 
 error: aborting due to 8 previous errors
-
