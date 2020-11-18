@@ -4,7 +4,14 @@ use std::iter;
 
 fn calls_fn<'tcx>(expr: &'tcx [Expr<'_>], fn_name: &str) -> bool {
     expr.get(1).map_or(false, |x| match &x.kind {
-        ExprKind::Path(qp) => match_qpath(qp, &paths::OPTION.iter().cloned().chain(iter::once(fn_name)).collect::<Vec<&str>>()),
+        ExprKind::Path(qp) => match_qpath(
+            qp,
+            &paths::OPTION
+                .iter()
+                .cloned()
+                .chain(iter::once(fn_name))
+                .collect::<Vec<&str>>(),
+        ),
         _ => false,
     })
 }
