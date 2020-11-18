@@ -862,11 +862,11 @@ declare_clippy_lint! {
     /// **Example:**
     ///
     /// ```rust
-    /// my_iter.filter(Option::is_some).map(Option::unwrap)
+    /// let _ = std::iter::empty::<Option<i32>>().filter(Option::is_some).map(Option::unwrap);
     /// ```
     /// Use instead:
     /// ```rust
-    /// my_iter.flatten()
+    /// let _ = std::iter::empty::<Option<i32>>().flatten();
     /// ```
     pub OPTION_FILTER_MAP,
     style,
