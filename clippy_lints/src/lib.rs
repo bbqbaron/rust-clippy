@@ -1797,7 +1797,6 @@ pub fn register_plugins(store: &mut rustc_lint::LintStore, sess: &Session, conf:
         LintId::of(&methods::MAP_COLLECT_RESULT_UNIT),
         LintId::of(&methods::NEW_RET_NO_SELF),
         LintId::of(&methods::OK_EXPECT),
-        LintId::of(&methods::OPTION_FILTER_MAP),
         LintId::of(&methods::OPTION_MAP_OR_NONE),
         LintId::of(&methods::RESULT_MAP_OR_INTO_OPTION),
         LintId::of(&methods::SHOULD_IMPLEMENT_TRAIT),

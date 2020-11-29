@@ -4,7 +4,6 @@ mod filter_map_identity;
 mod inefficient_to_string;
 mod inspect_for_each;
 mod manual_saturating_arithmetic;
-mod option_filter_map;
 mod option_map_unwrap_or;
 mod unnecessary_filter_map;
 mod unnecessary_lazy_eval;
@@ -21,7 +20,6 @@ use rustc_hir as hir;
 use rustc_hir::{Expr, ExprKind, PatKind, TraitItem, TraitItemKind, UnOp};
 use rustc_hir::def::Res;
 use rustc_hir::intravisit::{self, Visitor};
-use rustc_hir::{TraitItem, TraitItemKind};
 use rustc_lint::{LateContext, LateLintPass, Lint, LintContext};
 use rustc_middle::lint::in_external_macro;
 use rustc_middle::ty::{self, TraitRef, Ty, TyS};
@@ -48,6 +46,11 @@ use crate::utils::{
     method_chain_args, paths, remove_blocks, return_ty, single_segment_path, snippet, snippet_block,
     snippet_with_applicability, snippet_with_macro_callsite, span_lint, span_lint_and_help, span_lint_and_sugg, span_lint_and_then, sugg,
     walk_ptrs_ty_depth, SpanlessEq,
+    contains_ty, get_arg_name, get_parent_expr, get_trait_def_id, has_iter_method, higher, implements_trait, in_macro,
+    is_copy, is_expn_of, is_type_diagnostic_item, iter_input_pats, last_path_segment, match_def_path, match_qpath,
+    match_trait_method, match_type, match_var, method_calls, method_chain_args, paths, remove_blocks, return_ty,
+    single_segment_path, snippet, snippet_with_applicability, snippet_with_macro_callsite, span_lint,
+    span_lint_and_help, span_lint_and_sugg, span_lint_and_then, sugg, walk_ptrs_ty_depth, SpanlessEq, snippet_block
 };
 
 declare_clippy_lint! {
