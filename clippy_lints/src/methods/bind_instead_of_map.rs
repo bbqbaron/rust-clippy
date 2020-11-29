@@ -1,7 +1,8 @@
-use super::{contains_return, BIND_INSTEAD_OF_MAP};
+use super::BIND_INSTEAD_OF_MAP;
 use crate::utils::{
-    in_macro, match_qpath, match_type, method_calls, multispan_sugg_with_applicability, paths, remove_blocks, snippet,
-    snippet_with_macro_callsite, span_lint_and_sugg, span_lint_and_then, visitors::find_all_ret_expressions,
+    contains_return, in_macro, match_qpath, match_type, method_calls, multispan_sugg_with_applicability, paths,
+    remove_blocks, snippet, snippet_with_macro_callsite, span_lint_and_sugg, span_lint_and_then,
+    visitors::find_all_ret_expressions,
 };
 use if_chain::if_chain;
 use rustc_errors::Applicability;
