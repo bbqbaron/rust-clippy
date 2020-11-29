@@ -4,7 +4,6 @@ mod filter_map_identity;
 mod inefficient_to_string;
 mod inspect_for_each;
 mod manual_saturating_arithmetic;
-mod option_filter_map;
 mod option_map_unwrap_or;
 mod unnecessary_filter_map;
 mod unnecessary_lazy_eval;
@@ -19,14 +18,18 @@ use rustc_ast::ast;
 use rustc_errors::Applicability;
 use rustc_hir as hir;
 use rustc_hir::{Expr, ExprKind, PatKind, TraitItem, TraitItemKind, UnOp};
+use rustc_hir::def::Res;
+use rustc_hir::intravisit::{self, Visitor};
+use rustc_hir::{TraitItem, TraitItemKind};
 use rustc_lint::{LateContext, LateLintPass, Lint, LintContext};
 use rustc_middle::lint::in_external_macro;
 use rustc_middle::ty::{self, TraitRef, Ty, TyS};
 use rustc_semver::RustcVersion;
 use rustc_session::{declare_tool_lint, impl_lint_pass};
 use rustc_span::source_map::Span;
-use rustc_span::symbol::{sym, SymbolStr};
+use rustc_span::symbol::{sym, Symbol, SymbolStr};
 use rustc_typeck::hir_ty_to_ty;
+use rustc_span::symbol::{sym, Symbol, SymbolStr};
 
 use crate::consts::{constant, Constant};
 use crate::utils::eager_or_lazy::is_lazyness_candidate;
@@ -38,6 +41,12 @@ use crate::utils::{
     remove_blocks, return_ty, single_segment_path, snippet, snippet_with_applicability, snippet_with_macro_callsite,
     span_lint, span_lint_and_help, span_lint_and_sugg, span_lint_and_then, strip_pat_refs, sugg, walk_ptrs_ty_depth,
     SpanlessEq,
+    contains_return, contains_ty, get_arg_name, get_parent_expr, get_trait_def_id, has_iter_method, higher,
+    implements_trait, in_macro, is_copy, is_expn_of, is_type_diagnostic_item, iter_input_pats, last_path_segment,
+    match_def_path, match_qpath, match_trait_method, match_type, match_var, meets_msrv, method_calls,
+    method_chain_args, paths, remove_blocks, return_ty, single_segment_path, snippet, snippet_block,
+    snippet_with_applicability, snippet_with_macro_callsite, span_lint, span_lint_and_help, span_lint_and_sugg, span_lint_and_then, sugg,
+    walk_ptrs_ty_depth, SpanlessEq,
 };
 
 declare_clippy_lint! {
@@ -869,7 +878,7 @@ declare_clippy_lint! {
     /// let _ = std::iter::empty::<Option<i32>>().flatten();
     /// ```
     pub OPTION_FILTER_MAP,
-    style,
+    complexity,
     "filtering `Option` for `Some` then force-unwrapping, which can be one type-safe operation"
 }
 
@@ -3182,27 +3191,75 @@ fn lint_filter_map<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'_>, is_f
             let sugg = format!("{}_map(|{}| {}{})", filter_name, map_param_ident,
                 snippet(cx, map_arg.span, ".."), to_opt);
             span_lint_and_sugg(cx, lint, span, &msg, "try", sugg, Applicability::MachineApplicable);
+            }
+        }
+}
+
+fn is_method<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'_>, method_path: &[&str], method_name: Symbol) -> bool {
+    match &expr.kind {
+        hir::ExprKind::Path(qp) => match_qpath(
+            qp,
+            method_path,
+        ),
+        hir::ExprKind::Closure(_, _, c, _, _) => {
+            let body = cx.tcx.hir().body(*c);
+            let arg_id = body.params[0].pat.hir_id;
+            match body.value.kind {
+                hir::ExprKind::MethodCall(hir::PathSegment { ident, .. }, _, ref args, _) => {
+                    if_chain! {
+                    if ident.name == method_name;
+                    if let hir::ExprKind::Path(path) = &args[0].kind;
+                    if let Res::Local(ref local) = cx.qpath_res(path, args[0].hir_id);
+                    then {
+                        return arg_id == *local
+                    }
+                    }
+                    false
+                }
+                hir::ExprKind::Block(ref block, _) => block
+                    .expr
+                    .as_ref()
+                    .map_or(false, |expr| is_method(cx, &expr, method_path, method_name)),
+                _ => false
+            }
+        }
+        _ => false
+    }
+}
+
+fn is_option_filter_map<'tcx>(cx: &LateContext<'tcx>, filter_args: &'tcx [hir::Expr<'_>], map_args: &'tcx [hir::Expr<'_>]) -> bool {
+    map_args.get(1).map_or(false, |arg| is_method(cx, arg, &paths::OPTION_UNWRAP, sym!(unwrap)))
+ && filter_args.get(1).map_or(false, |arg| is_option_method(cx, arg, &paths::OPTION_IS_SOME, sym!(is_some)))
+}
 
 /// lint use of `filter().map()` for `Iterators`
 fn lint_filter_some_map_unwrap<'tcx>(
     cx: &LateContext<'tcx>,
     expr: &'tcx hir::Expr<'_>,
     filter_args: &'tcx [hir::Expr<'_>],
-    map_args: &'tcx [hir::Expr<'_>],
+    map_args: &'tcx [hir::Expr<'_>]
 ) {
-    // is it specifically `.filter(Option::is_some).map(Option::unwrap)`?
-    if option_filter_map::in_scope(filter_args, map_args) {
-        span_lint_and_help(
-            cx,
-            OPTION_FILTER_MAP,
-            expr.span,
-            "`filter` for `Some` followed by `unwrap`",
-            None,
-            "consider using `flatten` instead",
-        );
-    } else {
-        // lint if caller of `.filter().map()` is an Iterator
-        if match_trait_method(cx, expr, &paths::ITERATOR) {
+    let iterator_or_option = match_trait_method(cx, expr, &paths::ITERATOR) || is_type_diagnostic_item(cx, cx.typeck_results().expr_ty(&filter_args[0]), sym::option_type);
+    if iterator_or_option {
+        if is_option_filter_map(cx, filter_args, map_args) {
+            let msg = "`filter` for `Some` followed by `unwrap`";
+            let help = "consider using `flatten` instead";
+            let sugg = format!(
+                "{}.flatten()",
+                snippet_block(
+                    cx,
+                    filter_args[0].span,
+                    "..",
+                    Some(expr.span)));
+            span_lint_and_sugg(
+                cx,
+                OPTION_FILTER_MAP,
+                expr.span.with_hi(expr.span.hi()),
+                msg,
+                help,
+                sugg,
+                Applicability::MachineApplicable);
+        } else {
             let msg = "called `filter(..).map(..)` on an `Iterator`";
             let hint = "this is more succinctly expressed by calling `.filter_map(..)` instead";
             span_lint_and_help(cx, FILTER_MAP, expr.span, msg, None, hint);
