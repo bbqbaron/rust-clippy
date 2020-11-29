@@ -3201,10 +3201,7 @@ fn lint_filter_map<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'_>, is_f
 
 fn is_method<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'_>, method_path: &[&str], method_name: Symbol) -> bool {
     match &expr.kind {
-        hir::ExprKind::Path(qp) => match_qpath(
-            qp,
-            method_path,
-        ),
+        hir::ExprKind::Path(qp) => match_qpath(qp, method_path),
         hir::ExprKind::Closure(_, _, c, _, _) => {
             let body = cx.tcx.hir().body(*c);
             let arg_id = body.params[0].pat.hir_id;
@@ -3219,21 +3216,29 @@ fn is_method<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'_>, method_path: &[
                     }
                     }
                     false
-                }
+                },
                 hir::ExprKind::Block(ref block, _) => block
                     .expr
                     .as_ref()
                     .map_or(false, |expr| is_method(cx, &expr, method_path, method_name)),
-                _ => false
+                _ => false,
             }
-        }
-        _ => false
+        },
+        _ => false,
     }
 }
 
-fn is_option_filter_map<'tcx>(cx: &LateContext<'tcx>, filter_args: &'tcx [hir::Expr<'_>], map_args: &'tcx [hir::Expr<'_>]) -> bool {
-    map_args.get(1).map_or(false, |arg| is_method(cx, arg, &paths::OPTION_UNWRAP, sym!(unwrap)))
- && filter_args.get(1).map_or(false, |arg| is_option_method(cx, arg, &paths::OPTION_IS_SOME, sym!(is_some)))
+fn is_option_filter_map<'tcx>(
+    cx: &LateContext<'tcx>,
+    filter_args: &'tcx [hir::Expr<'_>],
+    map_args: &'tcx [hir::Expr<'_>],
+) -> bool {
+    map_args
+        .get(1)
+        .map_or(false, |arg| is_method(cx, arg, &paths::OPTION_UNWRAP, sym!(unwrap)))
+        && filter_args.get(1).map_or(false, |arg| {
+            is_option_method(cx, arg, &paths::OPTION_IS_SOME, sym!(is_some))
+        })
 }
 
 /// lint use of `filter().map()` for `Iterators`
@@ -3241,20 +3246,18 @@ fn lint_filter_some_map_unwrap<'tcx>(
     cx: &LateContext<'tcx>,
     expr: &'tcx hir::Expr<'_>,
     filter_args: &'tcx [hir::Expr<'_>],
-    map_args: &'tcx [hir::Expr<'_>]
+    map_args: &'tcx [hir::Expr<'_>],
 ) {
-    let iterator_or_option = match_trait_method(cx, expr, &paths::ITERATOR) || is_type_diagnostic_item(cx, cx.typeck_results().expr_ty(&filter_args[0]), sym::option_type);
+    let iterator_or_option = match_trait_method(cx, expr, &paths::ITERATOR)
+        || is_type_diagnostic_item(cx, cx.typeck_results().expr_ty(&filter_args[0]), sym::option_type);
     if iterator_or_option {
         if is_option_filter_map(cx, filter_args, map_args) {
             let msg = "`filter` for `Some` followed by `unwrap`";
             let help = "consider using `flatten` instead";
             let sugg = format!(
                 "{}.flatten()",
-                snippet_block(
-                    cx,
-                    filter_args[0].span,
-                    "..",
-                    Some(expr.span)));
+                snippet_block(cx, filter_args[0].span, "..", Some(expr.span))
+            );
             span_lint_and_sugg(
                 cx,
                 OPTION_FILTER_MAP,
@@ -3262,7 +3265,8 @@ fn lint_filter_some_map_unwrap<'tcx>(
                 msg,
                 help,
                 sugg,
-                Applicability::MachineApplicable);
+                Applicability::MachineApplicable,
+            );
         } else {
             let msg = "called `filter(..).map(..)` on an `Iterator`";
             let hint = "this is more succinctly expressed by calling `.filter_map(..)` instead";
