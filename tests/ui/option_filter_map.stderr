@@ -71,4 +71,6 @@ LL |     let _ = vec![1]
 LL |         .into_iter()
 LL |         .map(odds_out).flatten();
    |
+
 error: aborting due to 8 previous errors
+

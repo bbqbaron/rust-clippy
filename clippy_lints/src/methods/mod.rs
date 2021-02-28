@@ -18,7 +18,6 @@ use rustc_ast::ast;
 use rustc_errors::Applicability;
 use rustc_hir as hir;
 use rustc_hir::def::Res;
-use rustc_hir::intravisit::{self, Visitor};
 use rustc_hir::{Expr, ExprKind, PatKind, TraitItem, TraitItemKind, UnOp};
 use rustc_lint::{LateContext, LateLintPass, Lint, LintContext};
 use rustc_middle::lint::in_external_macro;
@@ -35,7 +34,7 @@ use crate::utils::usage::mutated_variables;
 use crate::utils::{
     contains_return, contains_ty, get_parent_expr, get_trait_def_id, has_iter_method, higher, implements_trait,
     in_macro, is_copy, is_expn_of, is_type_diagnostic_item, iter_input_pats, last_path_segment, match_def_path,
-    match_qpath, match_trait_method, match_type, match_var, meets_msrv, method_calls, method_chain_args,
+    match_qpath, match_trait_method, match_type, meets_msrv, method_calls, method_chain_args,
     path_to_local_id, paths, remove_blocks, return_ty, single_segment_path, snippet, snippet_block,
     snippet_with_applicability, snippet_with_macro_callsite, span_lint, span_lint_and_help, span_lint_and_sugg,
     span_lint_and_then, strip_pat_refs, sugg, walk_ptrs_ty_depth, SpanlessEq,
@@ -3119,9 +3118,7 @@ fn lint_filter_map<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'_>, is_f
     if let ExprKind::MethodCall(_, _, [map_recv, map_arg], map_span) = expr.kind;
     if let ExprKind::MethodCall(_, _, [filter_recv, filter_arg], filter_span) = map_recv.kind;
     let _ = {
-      lint_filter_some_map_unwrap(cx, expr, filter_recv, filter_arg, 
-        map_recv, map_arg, span);
-      1
+      lint_filter_some_map_unwrap(cx, expr, filter_recv, filter_arg, map_arg, span);
     };
     if match_trait_method(cx, map_recv, &paths::ITERATOR);
 
@@ -3240,7 +3237,6 @@ fn lint_filter_some_map_unwrap<'tcx>(
     expr: &'tcx hir::Expr<'_>,
     filter_recv: &'tcx hir::Expr<'_>,
     filter_arg: &'tcx hir::Expr<'_>,
-    map_recv: &'tcx hir::Expr<'_>,
     map_arg: &'tcx hir::Expr<'_>,
     target_span: Span,
 ) {
