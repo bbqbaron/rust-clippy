@@ -3192,8 +3192,9 @@ fn is_method<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'_>, method_path: &[
         hir::ExprKind::Path(qp) => match_qpath(qp, method_path),
         hir::ExprKind::Closure(_, _, c, _, _) => {
             let body = cx.tcx.hir().body(*c);
+            let closure_expr = remove_blocks(&body.value);
             let arg_id = body.params[0].pat.hir_id;
-            match body.value.kind {
+            match closure_expr.kind {
                 hir::ExprKind::MethodCall(hir::PathSegment { ident, .. }, _, ref args, _) => {
                     if_chain! {
                     if ident.name == method_name;
@@ -3205,10 +3206,6 @@ fn is_method<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'_>, method_path: &[
                     }
                     false
                 },
-                hir::ExprKind::Block(ref block, _) => block
-                    .expr
-                    .as_ref()
-                    .map_or(false, |expr| is_method(cx, &expr, method_path, method_name)),
                 _ => false,
             }
         },
