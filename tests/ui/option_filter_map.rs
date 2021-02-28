@@ -1,3 +1,4 @@
+#![warn(clippy::option_filter_map)]
 // run-rustfix
 fn odds_out(x: i32) -> Option<i32> {
     if x % 2 == 0 {

@@ -34,11 +34,12 @@ use crate::utils::usage::mutated_variables;
 use crate::utils::{
     contains_return, contains_ty, get_parent_expr, get_trait_def_id, has_iter_method, higher, implements_trait,
     in_macro, is_copy, is_expn_of, is_type_diagnostic_item, iter_input_pats, last_path_segment, match_def_path,
-    match_qpath, match_trait_method, match_type, meets_msrv, method_calls, method_chain_args,
-    path_to_local_id, paths, remove_blocks, return_ty, single_segment_path, snippet, snippet_block,
-    snippet_with_applicability, snippet_with_macro_callsite, span_lint, span_lint_and_help, span_lint_and_sugg,
-    span_lint_and_then, strip_pat_refs, sugg, walk_ptrs_ty_depth, SpanlessEq,
+    match_qpath, match_trait_method, match_type, meets_msrv, method_calls, method_chain_args, path_to_local_id, paths,
+    remove_blocks, return_ty, single_segment_path, snippet, snippet_block, snippet_with_applicability,
+    snippet_with_macro_callsite, span_lint, span_lint_and_help, span_lint_and_sugg, span_lint_and_then, strip_pat_refs,
+    sugg, walk_ptrs_ty_depth, SpanlessEq,
 };
+use clippy_utils::paths::{OPTION_IS_SOME, OPTION_UNWRAP};
 
 declare_clippy_lint! {
     /// **What it does:** Checks for `.unwrap()` calls on `Option`s and on `Result`s.
@@ -3213,17 +3214,12 @@ fn is_method<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'_>, method_path: &[
     }
 }
 
-// these two paths can't be checked and thus aren't in `paths`
-const OPTION_IS_SOME: [&str; 4] = ["core", "option", "Option", "is_some"];
-const OPTION_UNWRAP: [&str; 4] = ["core", "option", "Option", "unwrap"];
-
 fn is_option_filter_map<'tcx>(
     cx: &LateContext<'tcx>,
     filter_arg: &'tcx hir::Expr<'_>,
     map_arg: &'tcx hir::Expr<'_>,
 ) -> bool {
-    is_method(cx, map_arg, &OPTION_UNWRAP, sym!(unwrap)) &&
-    is_method(cx, filter_arg, &OPTION_IS_SOME, sym!(is_some))
+    is_method(cx, map_arg, &OPTION_UNWRAP, sym!(unwrap)) && is_method(cx, filter_arg, &OPTION_IS_SOME, sym!(is_some))
 }
 
 /// lint use of `filter().map()` for `Iterators`
@@ -3238,28 +3234,22 @@ fn lint_filter_some_map_unwrap<'tcx>(
     let iterator = match_trait_method(cx, expr, &paths::ITERATOR);
     let iterator_or_option =
         iterator || is_type_diagnostic_item(cx, cx.typeck_results().expr_ty(&filter_recv), sym::option_type);
-    if iterator_or_option {
-        if is_option_filter_map(cx, filter_arg, map_arg) {
-            let msg = "`filter` for `Some` followed by `unwrap`";
-            let help = "consider using `flatten` instead";
-            let sugg = format!(
-                "{}.flatten()",
-                snippet_block(cx, filter_recv.span, "..", Some(target_span))
-            );
-            span_lint_and_sugg(
-                cx,
-                OPTION_FILTER_MAP,
-                expr.span.with_hi(expr.span.hi()),
-                msg,
-                help,
-                sugg,
-                Applicability::MachineApplicable,
-            );
-        } else if iterator {
-            let msg = "called `filter(..).map(..)` on an `Iterator`";
-            let hint = "this is more succinctly expressed by calling `.filter_map(..)` instead";
-            span_lint_and_help(cx, FILTER_MAP, expr.span, msg, None, hint);
-        }
+    if iterator_or_option && is_option_filter_map(cx, filter_arg, map_arg) {
+        let msg = "`filter` for `Some` followed by `unwrap`";
+        let help = "consider using `flatten` instead";
+        let sugg = format!(
+            "{}.flatten()",
+            snippet_block(cx, filter_recv.span, "..", Some(target_span))
+        );
+        span_lint_and_sugg(
+            cx,
+            OPTION_FILTER_MAP,
+            expr.span.with_hi(expr.span.hi()),
+            msg,
+            help,
+            sugg,
+            Applicability::MachineApplicable,
+        );
     }
 }
 
