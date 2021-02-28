@@ -2197,13 +2197,13 @@ fn lint_expect_fun_call(
         match node {
             hir::ExprKind::AddrOf(hir::BorrowKind::Ref, _, expr) => {
                 is_call(&expr.kind)
-            }
+            },
             hir::ExprKind::Call(..)
             | hir::ExprKind::MethodCall(..)
             // These variants are debatable or require further examination
             | hir::ExprKind::If(..)
             | hir::ExprKind::Match(..)
-            | hir::ExprKind::Block { .. } => true,
+            | hir::ExprKind::Block{ .. } => true,
             _ => false,
         }
     }
@@ -3113,78 +3113,76 @@ fn lint_skip_while_next<'tcx>(
 }
 
 /// lint use of `filter().map()` or `find().map()` for `Iterators`
-fn lint_filter_map<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'_>, is_find: bool, span: Span) {
+fn lint_filter_map<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'_>, is_find: bool, target_span: Span) {
     if_chain! {
-    if let ExprKind::MethodCall(_, _, [map_recv, map_arg], map_span) = expr.kind;
-    if let ExprKind::MethodCall(_, _, [filter_recv, filter_arg], filter_span) = map_recv.kind;
-    let _ = {
-      lint_filter_some_map_unwrap(cx, expr, filter_recv, filter_arg, map_arg, span);
-    };
-    if match_trait_method(cx, map_recv, &paths::ITERATOR);
+        if let ExprKind::MethodCall(_, _, [map_recv, map_arg], map_span) = expr.kind;
+        if let ExprKind::MethodCall(_, _, [filter_recv, filter_arg], filter_span) = map_recv.kind;
+        let _ = lint_filter_some_map_unwrap(cx, expr, filter_recv, filter_arg, map_arg, target_span);
+        if match_trait_method(cx, map_recv, &paths::ITERATOR);
 
-    // filter(|x| ...is_some())...
-    if let ExprKind::Closure(_, _, filter_body_id, ..) = filter_arg.kind;
-    let filter_body = cx.tcx.hir().body(filter_body_id);
-    if let [filter_param] = filter_body.params;
-    // optional ref pattern: `filter(|&x| ..)`
-    let (filter_pat, is_filter_param_ref) = if let PatKind::Ref(ref_pat, _) = filter_param.pat.kind {
-        (ref_pat, true)
-    } else {
-        (filter_param.pat, false)
-    };
-    // closure ends with is_some() or is_ok()
-    if let PatKind::Binding(_, filter_param_id, _, None) = filter_pat.kind;
-    if let ExprKind::MethodCall(path, _, [filter_arg], _) = filter_body.value.kind;
-    if let Some(opt_ty) = cx.typeck_results().expr_ty(filter_arg).ty_adt_def();
-    if let Some(is_result) = if cx.tcx.is_diagnostic_item(sym::option_type, opt_ty.did) {
-        Some(false)
-    } else if cx.tcx.is_diagnostic_item(sym::result_type, opt_ty.did) {
-        Some(true)
-    } else {
-        None
-    };
-    if path.ident.name.as_str() == if is_result { "is_ok" } else { "is_some" };
-
-    // ...map(|x| ...unwrap())
-    if let ExprKind::Closure(_, _, map_body_id, ..) = map_arg.kind;
-    let map_body = cx.tcx.hir().body(map_body_id);
-    if let [map_param] = map_body.params;
-    if let PatKind::Binding(_, map_param_id, map_param_ident, None) = map_param.pat.kind;
-    // closure ends with expect() or unwrap()
-    if let ExprKind::MethodCall(seg, _, [map_arg, ..], _) = map_body.value.kind;
-    if matches!(seg.ident.name, sym::expect | sym::unwrap | sym::unwrap_or);
-
-    let eq_fallback = |a: &Expr<'_>, b: &Expr<'_>| {
-        // in `filter(|x| ..)`, replace `*x` with `x`
-        let a_path = if_chain! {
-            if !is_filter_param_ref;
-            if let ExprKind::Unary(UnOp::Deref, expr_path) = a.kind;
-            then { expr_path } else { a }
-        };
-        // let the filter closure arg and the map closure arg be equal
-        if_chain! {
-            if path_to_local_id(a_path, filter_param_id);
-            if path_to_local_id(b, map_param_id);
-            if TyS::same_type(cx.typeck_results().expr_ty_adjusted(a), cx.typeck_results().expr_ty_adjusted(b));
-            then {
-                return true;
-            }
-        }
-        false
-    };
-    if SpanlessEq::new(cx).expr_fallback(eq_fallback).eq_expr(filter_arg, map_arg);
-    then {
-        let span = filter_span.to(map_span);
-        let (filter_name, lint) = if is_find {
-            ("find", MANUAL_FIND_MAP)
+        // filter(|x| ...is_some())...
+        if let ExprKind::Closure(_, _, filter_body_id, ..) = filter_arg.kind;
+        let filter_body = cx.tcx.hir().body(filter_body_id);
+        if let [filter_param] = filter_body.params;
+        // optional ref pattern: `filter(|&x| ..)`
+        let (filter_pat, is_filter_param_ref) = if let PatKind::Ref(ref_pat, _) = filter_param.pat.kind {
+            (ref_pat, true)
         } else {
-            ("filter", MANUAL_FILTER_MAP)
+            (filter_param.pat, false)
         };
-        let msg = format!("`{}(..).map(..)` can be simplified as `{0}_map(..)`", filter_name);
-        let to_opt = if is_result { ".ok()" } else { "" };
-        let sugg = format!("{}_map(|{}| {}{})", filter_name, map_param_ident,
-            snippet(cx, map_arg.span, ".."), to_opt);
-        span_lint_and_sugg(cx, lint, span, &msg, "try", sugg, Applicability::MachineApplicable);
+        // closure ends with is_some() or is_ok()
+        if let PatKind::Binding(_, filter_param_id, _, None) = filter_pat.kind;
+        if let ExprKind::MethodCall(path, _, [filter_arg], _) = filter_body.value.kind;
+        if let Some(opt_ty) = cx.typeck_results().expr_ty(filter_arg).ty_adt_def();
+        if let Some(is_result) = if cx.tcx.is_diagnostic_item(sym::option_type, opt_ty.did) {
+            Some(false)
+        } else if cx.tcx.is_diagnostic_item(sym::result_type, opt_ty.did) {
+            Some(true)
+        } else {
+            None
+        };
+        if path.ident.name.as_str() == if is_result { "is_ok" } else { "is_some" };
+
+        // ...map(|x| ...unwrap())
+        if let ExprKind::Closure(_, _, map_body_id, ..) = map_arg.kind;
+        let map_body = cx.tcx.hir().body(map_body_id);
+        if let [map_param] = map_body.params;
+        if let PatKind::Binding(_, map_param_id, map_param_ident, None) = map_param.pat.kind;
+        // closure ends with expect() or unwrap()
+        if let ExprKind::MethodCall(seg, _, [map_arg, ..], _) = map_body.value.kind;
+        if matches!(seg.ident.name, sym::expect | sym::unwrap | sym::unwrap_or);
+
+        let eq_fallback = |a: &Expr<'_>, b: &Expr<'_>| {
+            // in `filter(|x| ..)`, replace `*x` with `x`
+            let a_path = if_chain! {
+                if !is_filter_param_ref;
+                if let ExprKind::Unary(UnOp::Deref, expr_path) = a.kind;
+                then { expr_path } else { a }
+            };
+            // let the filter closure arg and the map closure arg be equal
+            if_chain! {
+                if path_to_local_id(a_path, filter_param_id);
+                if path_to_local_id(b, map_param_id);
+                if TyS::same_type(cx.typeck_results().expr_ty_adjusted(a), cx.typeck_results().expr_ty_adjusted(b));
+                then {
+                    return true;
+                }
+            }
+            false
+        };
+        if SpanlessEq::new(cx).expr_fallback(eq_fallback).eq_expr(filter_arg, map_arg);
+        then {
+            let span = filter_span.to(map_span);
+            let (filter_name, lint) = if is_find {
+                ("find", MANUAL_FIND_MAP)
+            } else {
+                ("filter", MANUAL_FILTER_MAP)
+            };
+            let msg = format!("`{}(..).map(..)` can be simplified as `{0}_map(..)`", filter_name);
+            let to_opt = if is_result { ".ok()" } else { "" };
+            let sugg = format!("{}_map(|{}| {}{})", filter_name, map_param_ident,
+                snippet(cx, map_arg.span, ".."), to_opt);
+            span_lint_and_sugg(cx, lint, span, &msg, "try", sugg, Applicability::MachineApplicable);
         }
     }
 }
@@ -3227,7 +3225,7 @@ fn is_option_filter_map<'tcx>(
     filter_arg: &'tcx hir::Expr<'_>,
     map_arg: &'tcx hir::Expr<'_>,
 ) -> bool {
-    is_method(cx, map_arg, &OPTION_UNWRAP, sym!(unwrap)) && 
+    is_method(cx, map_arg, &OPTION_UNWRAP, sym!(unwrap)) &&
     is_method(cx, filter_arg, &OPTION_IS_SOME, sym!(is_some))
 }
 
@@ -4044,37 +4042,37 @@ impl ShouldImplTraitCase {
 
 #[rustfmt::skip]
 const TRAIT_METHODS: [ShouldImplTraitCase; 30] = [
-    ShouldImplTraitCase::new("std::ops::Add", "add", 2, FN_HEADER, SelfKind::Value, OutType::Any, true),
-    ShouldImplTraitCase::new("std::convert::AsMut", "as_mut", 1, FN_HEADER, SelfKind::RefMut, OutType::Ref, true),
-    ShouldImplTraitCase::new("std::convert::AsRef", "as_ref", 1, FN_HEADER, SelfKind::Ref, OutType::Ref, true),
-    ShouldImplTraitCase::new("std::ops::BitAnd", "bitand", 2, FN_HEADER, SelfKind::Value, OutType::Any, true),
-    ShouldImplTraitCase::new("std::ops::BitOr", "bitor", 2, FN_HEADER, SelfKind::Value, OutType::Any, true),
-    ShouldImplTraitCase::new("std::ops::BitXor", "bitxor", 2, FN_HEADER, SelfKind::Value, OutType::Any, true),
-    ShouldImplTraitCase::new("std::borrow::Borrow", "borrow", 1, FN_HEADER, SelfKind::Ref, OutType::Ref, true),
-    ShouldImplTraitCase::new("std::borrow::BorrowMut", "borrow_mut", 1, FN_HEADER, SelfKind::RefMut, OutType::Ref, true),
-    ShouldImplTraitCase::new("std::clone::Clone", "clone", 1, FN_HEADER, SelfKind::Ref, OutType::Any, true),
-    ShouldImplTraitCase::new("std::cmp::Ord", "cmp", 2, FN_HEADER, SelfKind::Ref, OutType::Any, true),
+    ShouldImplTraitCase::new("std::ops::Add", "add",  2,  FN_HEADER,  SelfKind::Value,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::convert::AsMut", "as_mut",  1,  FN_HEADER,  SelfKind::RefMut,  OutType::Ref, true),
+    ShouldImplTraitCase::new("std::convert::AsRef", "as_ref",  1,  FN_HEADER,  SelfKind::Ref,  OutType::Ref, true),
+    ShouldImplTraitCase::new("std::ops::BitAnd", "bitand",  2,  FN_HEADER,  SelfKind::Value,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::ops::BitOr", "bitor",  2,  FN_HEADER,  SelfKind::Value,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::ops::BitXor", "bitxor",  2,  FN_HEADER,  SelfKind::Value,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::borrow::Borrow", "borrow",  1,  FN_HEADER,  SelfKind::Ref,  OutType::Ref, true),
+    ShouldImplTraitCase::new("std::borrow::BorrowMut", "borrow_mut",  1,  FN_HEADER,  SelfKind::RefMut,  OutType::Ref, true),
+    ShouldImplTraitCase::new("std::clone::Clone", "clone",  1,  FN_HEADER,  SelfKind::Ref,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::cmp::Ord", "cmp",  2,  FN_HEADER,  SelfKind::Ref,  OutType::Any, true),
     // FIXME: default doesn't work
-    ShouldImplTraitCase::new("std::default::Default", "default", 0, FN_HEADER, SelfKind::No, OutType::Any, true),
-    ShouldImplTraitCase::new("std::ops::Deref", "deref", 1, FN_HEADER, SelfKind::Ref, OutType::Ref, true),
-    ShouldImplTraitCase::new("std::ops::DerefMut", "deref_mut", 1, FN_HEADER, SelfKind::RefMut, OutType::Ref, true),
-    ShouldImplTraitCase::new("std::ops::Div", "div", 2, FN_HEADER, SelfKind::Value, OutType::Any, true),
-    ShouldImplTraitCase::new("std::ops::Drop", "drop", 1, FN_HEADER, SelfKind::RefMut, OutType::Unit, true),
-    ShouldImplTraitCase::new("std::cmp::PartialEq", "eq", 2, FN_HEADER, SelfKind::Ref, OutType::Bool, true),
-    ShouldImplTraitCase::new("std::iter::FromIterator", "from_iter", 1, FN_HEADER, SelfKind::No, OutType::Any, true),
-    ShouldImplTraitCase::new("std::str::FromStr", "from_str", 1, FN_HEADER, SelfKind::No, OutType::Any, true),
-    ShouldImplTraitCase::new("std::hash::Hash", "hash", 2, FN_HEADER, SelfKind::Ref, OutType::Unit, true),
-    ShouldImplTraitCase::new("std::ops::Index", "index", 2, FN_HEADER, SelfKind::Ref, OutType::Ref, true),
-    ShouldImplTraitCase::new("std::ops::IndexMut", "index_mut", 2, FN_HEADER, SelfKind::RefMut, OutType::Ref, true),
-    ShouldImplTraitCase::new("std::iter::IntoIterator", "into_iter", 1, FN_HEADER, SelfKind::Value, OutType::Any, true),
-    ShouldImplTraitCase::new("std::ops::Mul", "mul", 2, FN_HEADER, SelfKind::Value, OutType::Any, true),
-    ShouldImplTraitCase::new("std::ops::Neg", "neg", 1, FN_HEADER, SelfKind::Value, OutType::Any, true),
-    ShouldImplTraitCase::new("std::iter::Iterator", "next", 1, FN_HEADER, SelfKind::RefMut, OutType::Any, false),
-    ShouldImplTraitCase::new("std::ops::Not", "not", 1, FN_HEADER, SelfKind::Value, OutType::Any, true),
-    ShouldImplTraitCase::new("std::ops::Rem", "rem", 2, FN_HEADER, SelfKind::Value, OutType::Any, true),
-    ShouldImplTraitCase::new("std::ops::Shl", "shl", 2, FN_HEADER, SelfKind::Value, OutType::Any, true),
-    ShouldImplTraitCase::new("std::ops::Shr", "shr", 2, FN_HEADER, SelfKind::Value, OutType::Any, true),
-    ShouldImplTraitCase::new("std::ops::Sub", "sub", 2, FN_HEADER, SelfKind::Value, OutType::Any, true),
+    ShouldImplTraitCase::new("std::default::Default", "default",  0,  FN_HEADER,  SelfKind::No,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::ops::Deref", "deref",  1,  FN_HEADER,  SelfKind::Ref,  OutType::Ref, true),
+    ShouldImplTraitCase::new("std::ops::DerefMut", "deref_mut",  1,  FN_HEADER,  SelfKind::RefMut,  OutType::Ref, true),
+    ShouldImplTraitCase::new("std::ops::Div", "div",  2,  FN_HEADER,  SelfKind::Value,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::ops::Drop", "drop",  1,  FN_HEADER,  SelfKind::RefMut,  OutType::Unit, true),
+    ShouldImplTraitCase::new("std::cmp::PartialEq", "eq",  2,  FN_HEADER,  SelfKind::Ref,  OutType::Bool, true),
+    ShouldImplTraitCase::new("std::iter::FromIterator", "from_iter",  1,  FN_HEADER,  SelfKind::No,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::str::FromStr", "from_str",  1,  FN_HEADER,  SelfKind::No,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::hash::Hash", "hash",  2,  FN_HEADER,  SelfKind::Ref,  OutType::Unit, true),
+    ShouldImplTraitCase::new("std::ops::Index", "index",  2,  FN_HEADER,  SelfKind::Ref,  OutType::Ref, true),
+    ShouldImplTraitCase::new("std::ops::IndexMut", "index_mut",  2,  FN_HEADER,  SelfKind::RefMut,  OutType::Ref, true),
+    ShouldImplTraitCase::new("std::iter::IntoIterator", "into_iter",  1,  FN_HEADER,  SelfKind::Value,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::ops::Mul", "mul",  2,  FN_HEADER,  SelfKind::Value,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::ops::Neg", "neg",  1,  FN_HEADER,  SelfKind::Value,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::iter::Iterator", "next",  1,  FN_HEADER,  SelfKind::RefMut,  OutType::Any, false),
+    ShouldImplTraitCase::new("std::ops::Not", "not",  1,  FN_HEADER,  SelfKind::Value,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::ops::Rem", "rem",  2,  FN_HEADER,  SelfKind::Value,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::ops::Shl", "shl",  2,  FN_HEADER,  SelfKind::Value,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::ops::Shr", "shr",  2,  FN_HEADER,  SelfKind::Value,  OutType::Any, true),
+    ShouldImplTraitCase::new("std::ops::Sub", "sub",  2,  FN_HEADER,  SelfKind::Value,  OutType::Any, true),
 ];
 
 #[rustfmt::skip]
