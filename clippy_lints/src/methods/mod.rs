@@ -17,9 +17,9 @@ use if_chain::if_chain;
 use rustc_ast::ast;
 use rustc_errors::Applicability;
 use rustc_hir as hir;
-use rustc_hir::{Expr, ExprKind, PatKind, TraitItem, TraitItemKind, UnOp};
 use rustc_hir::def::Res;
 use rustc_hir::intravisit::{self, Visitor};
+use rustc_hir::{Expr, ExprKind, PatKind, TraitItem, TraitItemKind, UnOp};
 use rustc_hir::{TraitItem, TraitItemKind};
 use rustc_lint::{LateContext, LateLintPass, Lint, LintContext};
 use rustc_middle::lint::in_external_macro;
@@ -28,32 +28,31 @@ use rustc_semver::RustcVersion;
 use rustc_session::{declare_tool_lint, impl_lint_pass};
 use rustc_span::source_map::Span;
 use rustc_span::symbol::{sym, Symbol, SymbolStr};
-use rustc_typeck::hir_ty_to_ty;
 use rustc_span::symbol::{sym, Symbol, SymbolStr};
+use rustc_typeck::hir_ty_to_ty;
 
 use crate::consts::{constant, Constant};
 use crate::utils::eager_or_lazy::is_lazyness_candidate;
 use crate::utils::usage::mutated_variables;
 use crate::utils::{
-    contains_return, contains_ty, get_parent_expr, get_trait_def_id, has_iter_method, higher, implements_trait,
-    in_macro, is_copy, is_expn_of, is_type_diagnostic_item, iter_input_pats, last_path_segment, match_def_path,
-    match_qpath, match_trait_method, match_type, meets_msrv, method_calls, method_chain_args, path_to_local_id, paths,
-    remove_blocks, return_ty, single_segment_path, snippet, snippet_with_applicability, snippet_with_macro_callsite,
-    span_lint, span_lint_and_help, span_lint_and_sugg, span_lint_and_then, strip_pat_refs, sugg, walk_ptrs_ty_depth,
-    SpanlessEq,
-    contains_return, contains_ty, get_arg_name, get_parent_expr, get_trait_def_id, has_iter_method, higher,
-    implements_trait, in_macro, is_copy, is_expn_of, is_type_diagnostic_item, iter_input_pats, last_path_segment,
-    match_def_path, match_qpath, match_trait_method, match_type, match_var, meets_msrv, method_calls,
-    method_chain_args, paths, remove_blocks, return_ty, single_segment_path, snippet, snippet_block,
-    snippet_with_applicability, snippet_with_macro_callsite, span_lint, span_lint_and_help, span_lint_and_sugg, span_lint_and_then, sugg,
-    walk_ptrs_ty_depth, SpanlessEq,
-    contains_ty, get_arg_name, get_parent_expr, get_trait_def_id, has_iter_method, higher, implements_trait, in_macro,
-    is_copy, is_expn_of, is_type_diagnostic_item, iter_input_pats, last_path_segment, match_def_path, match_qpath,
-    match_trait_method, match_type, match_var, method_calls, method_chain_args, paths, remove_blocks, return_ty,
-    single_segment_path, snippet, snippet_with_applicability, snippet_with_macro_callsite, span_lint,
-    span_lint_and_help, span_lint_and_sugg, span_lint_and_then, sugg, walk_ptrs_ty_depth, SpanlessEq, snippet_block,
-    snippet_with_applicability, snippet_with_macro_callsite, span_lint, span_lint_and_help, span_lint_and_sugg,
-    span_lint_and_then, sugg, walk_ptrs_ty_depth, SpanlessEq,
+    contains_return, contains_return, contains_ty, contains_ty, contains_ty, get_arg_name, get_arg_name,
+    get_parent_expr, get_parent_expr, get_parent_expr, get_trait_def_id, get_trait_def_id, get_trait_def_id,
+    has_iter_method, has_iter_method, has_iter_method, higher, higher, higher, implements_trait, implements_trait,
+    implements_trait, in_macro, in_macro, in_macro, is_copy, is_copy, is_copy, is_expn_of, is_expn_of, is_expn_of,
+    is_type_diagnostic_item, is_type_diagnostic_item, is_type_diagnostic_item, iter_input_pats, iter_input_pats,
+    iter_input_pats, last_path_segment, last_path_segment, last_path_segment, match_def_path, match_def_path,
+    match_def_path, match_qpath, match_qpath, match_qpath, match_trait_method, match_trait_method, match_trait_method,
+    match_type, match_type, match_type, match_var, match_var, meets_msrv, meets_msrv, method_calls, method_calls,
+    method_calls, method_chain_args, method_chain_args, method_chain_args, path_to_local_id, paths, paths, paths,
+    remove_blocks, remove_blocks, remove_blocks, return_ty, return_ty, return_ty, single_segment_path,
+    single_segment_path, single_segment_path, snippet, snippet, snippet, snippet_block, snippet_block,
+    snippet_with_applicability, snippet_with_applicability, snippet_with_applicability, snippet_with_applicability,
+    snippet_with_macro_callsite, snippet_with_macro_callsite, snippet_with_macro_callsite, snippet_with_macro_callsite,
+    span_lint, span_lint, span_lint, span_lint, span_lint_and_help, span_lint_and_help, span_lint_and_help,
+    span_lint_and_help, span_lint_and_sugg, span_lint_and_sugg, span_lint_and_sugg, span_lint_and_sugg,
+    span_lint_and_then, span_lint_and_then, span_lint_and_then, span_lint_and_then, strip_pat_refs, sugg, sugg, sugg,
+    sugg, walk_ptrs_ty_depth, walk_ptrs_ty_depth, walk_ptrs_ty_depth, walk_ptrs_ty_depth, SpanlessEq, SpanlessEq,
+    SpanlessEq, SpanlessEq,
 };
 
 declare_clippy_lint! {
@@ -3131,75 +3130,75 @@ fn lint_skip_while_next<'tcx>(
 /// lint use of `filter().map()` or `find().map()` for `Iterators`
 fn lint_filter_map<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx hir::Expr<'_>, is_find: bool) {
     if_chain! {
-        if let ExprKind::MethodCall(_, _, [map_recv, map_arg], map_span) = expr.kind;
-        if let ExprKind::MethodCall(_, _, [_, filter_arg], filter_span) = map_recv.kind;
-        if match_trait_method(cx, map_recv, &paths::ITERATOR);
+    if let ExprKind::MethodCall(_, _, [map_recv, map_arg], map_span) = expr.kind;
+    if let ExprKind::MethodCall(_, _, [_, filter_arg], filter_span) = map_recv.kind;
+    if match_trait_method(cx, map_recv, &paths::ITERATOR);
 
-        // filter(|x| ...is_some())...
-        if let ExprKind::Closure(_, _, filter_body_id, ..) = filter_arg.kind;
-        let filter_body = cx.tcx.hir().body(filter_body_id);
-        if let [filter_param] = filter_body.params;
-        // optional ref pattern: `filter(|&x| ..)`
-        let (filter_pat, is_filter_param_ref) = if let PatKind::Ref(ref_pat, _) = filter_param.pat.kind {
-            (ref_pat, true)
-        } else {
-            (filter_param.pat, false)
-        };
-        // closure ends with is_some() or is_ok()
-        if let PatKind::Binding(_, filter_param_id, _, None) = filter_pat.kind;
-        if let ExprKind::MethodCall(path, _, [filter_arg], _) = filter_body.value.kind;
-        if let Some(opt_ty) = cx.typeck_results().expr_ty(filter_arg).ty_adt_def();
-        if let Some(is_result) = if cx.tcx.is_diagnostic_item(sym::option_type, opt_ty.did) {
-            Some(false)
-        } else if cx.tcx.is_diagnostic_item(sym::result_type, opt_ty.did) {
-            Some(true)
-        } else {
-            None
-        };
-        if path.ident.name.as_str() == if is_result { "is_ok" } else { "is_some" };
+    // filter(|x| ...is_some())...
+    if let ExprKind::Closure(_, _, filter_body_id, ..) = filter_arg.kind;
+    let filter_body = cx.tcx.hir().body(filter_body_id);
+    if let [filter_param] = filter_body.params;
+    // optional ref pattern: `filter(|&x| ..)`
+    let (filter_pat, is_filter_param_ref) = if let PatKind::Ref(ref_pat, _) = filter_param.pat.kind {
+        (ref_pat, true)
+    } else {
+        (filter_param.pat, false)
+    };
+    // closure ends with is_some() or is_ok()
+    if let PatKind::Binding(_, filter_param_id, _, None) = filter_pat.kind;
+    if let ExprKind::MethodCall(path, _, [filter_arg], _) = filter_body.value.kind;
+    if let Some(opt_ty) = cx.typeck_results().expr_ty(filter_arg).ty_adt_def();
+    if let Some(is_result) = if cx.tcx.is_diagnostic_item(sym::option_type, opt_ty.did) {
+        Some(false)
+    } else if cx.tcx.is_diagnostic_item(sym::result_type, opt_ty.did) {
+        Some(true)
+    } else {
+        None
+    };
+    if path.ident.name.as_str() == if is_result { "is_ok" } else { "is_some" };
 
-        // ...map(|x| ...unwrap())
-        if let ExprKind::Closure(_, _, map_body_id, ..) = map_arg.kind;
-        let map_body = cx.tcx.hir().body(map_body_id);
-        if let [map_param] = map_body.params;
-        if let PatKind::Binding(_, map_param_id, map_param_ident, None) = map_param.pat.kind;
-        // closure ends with expect() or unwrap()
-        if let ExprKind::MethodCall(seg, _, [map_arg, ..], _) = map_body.value.kind;
-        if matches!(seg.ident.name, sym::expect | sym::unwrap | sym::unwrap_or);
+    // ...map(|x| ...unwrap())
+    if let ExprKind::Closure(_, _, map_body_id, ..) = map_arg.kind;
+    let map_body = cx.tcx.hir().body(map_body_id);
+    if let [map_param] = map_body.params;
+    if let PatKind::Binding(_, map_param_id, map_param_ident, None) = map_param.pat.kind;
+    // closure ends with expect() or unwrap()
+    if let ExprKind::MethodCall(seg, _, [map_arg, ..], _) = map_body.value.kind;
+    if matches!(seg.ident.name, sym::expect | sym::unwrap | sym::unwrap_or);
 
-        let eq_fallback = |a: &Expr<'_>, b: &Expr<'_>| {
-            // in `filter(|x| ..)`, replace `*x` with `x`
-            let a_path = if_chain! {
-                if !is_filter_param_ref;
-                if let ExprKind::Unary(UnOp::Deref, expr_path) = a.kind;
-                then { expr_path } else { a }
-            };
-            // let the filter closure arg and the map closure arg be equal
-            if_chain! {
-                if path_to_local_id(a_path, filter_param_id);
-                if path_to_local_id(b, map_param_id);
-                if TyS::same_type(cx.typeck_results().expr_ty_adjusted(a), cx.typeck_results().expr_ty_adjusted(b));
-                then {
-                    return true;
-                }
-            }
-            false
+    let eq_fallback = |a: &Expr<'_>, b: &Expr<'_>| {
+        // in `filter(|x| ..)`, replace `*x` with `x`
+        let a_path = if_chain! {
+            if !is_filter_param_ref;
+            if let ExprKind::Unary(UnOp::Deref, expr_path) = a.kind;
+            then { expr_path } else { a }
         };
-        if SpanlessEq::new(cx).expr_fallback(eq_fallback).eq_expr(filter_arg, map_arg);
-        then {
-            let span = filter_span.to(map_span);
-            let (filter_name, lint) = if is_find {
-                ("find", MANUAL_FIND_MAP)
-            } else {
-                ("filter", MANUAL_FILTER_MAP)
-            };
-            let msg = format!("`{}(..).map(..)` can be simplified as `{0}_map(..)`", filter_name);
-            let to_opt = if is_result { ".ok()" } else { "" };
-            let sugg = format!("{}_map(|{}| {}{})", filter_name, map_param_ident,
-                snippet(cx, map_arg.span, ".."), to_opt);
-            span_lint_and_sugg(cx, lint, span, &msg, "try", sugg, Applicability::MachineApplicable);
+        // let the filter closure arg and the map closure arg be equal
+        if_chain! {
+            if path_to_local_id(a_path, filter_param_id);
+            if path_to_local_id(b, map_param_id);
+            if TyS::same_type(cx.typeck_results().expr_ty_adjusted(a), cx.typeck_results().expr_ty_adjusted(b));
+            then {
+                return true;
             }
         }
+        false
+    };
+    if SpanlessEq::new(cx).expr_fallback(eq_fallback).eq_expr(filter_arg, map_arg);
+    then {
+        let span = filter_span.to(map_span);
+        let (filter_name, lint) = if is_find {
+            ("find", MANUAL_FIND_MAP)
+        } else {
+            ("filter", MANUAL_FILTER_MAP)
+        };
+        let msg = format!("`{}(..).map(..)` can be simplified as `{0}_map(..)`", filter_name);
+        let to_opt = if is_result { ".ok()" } else { "" };
+        let sugg = format!("{}_map(|{}| {}{})", filter_name, map_param_ident,
+            snippet(cx, map_arg.span, ".."), to_opt);
+        span_lint_and_sugg(cx, lint, span, &msg, "try", sugg, Applicability::MachineApplicable);
+        }
+    }
 }
 
 fn is_method<'tcx>(cx: &LateContext<'tcx>, expr: &hir::Expr<'_>, method_path: &[&str], method_name: Symbol) -> bool {
